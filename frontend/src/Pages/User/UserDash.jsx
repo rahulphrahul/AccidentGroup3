@@ -519,8 +519,8 @@ const CitizenDashboard = () => {
             <h3>Emergency Support Chat</h3>
             <p>Live chat with admin for this incident.</p>
           </div>
-          <button className="drawer-close" onClick={() => setChatOpen(false)}>
-            x
+          <button className="support-chat-close" onClick={() => setChatOpen(false)}>
+            Close
           </button>
         </header>
 
