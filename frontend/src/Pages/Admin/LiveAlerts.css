@@ -1,0 +1,112 @@
+@import "./AdminDashboard.css";
+
+/* Alerts Grid */
+.alerts-grid {
+  margin-top: 25px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+/* Alert Card */
+.alert-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.alert-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.25);
+}
+
+/* Header */
+.alert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.alert-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* Severity Badge */
+.severity {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: white;
+}
+
+.severity.critical {
+  background: #d32f2f;
+}
+
+.severity.severe {
+  background: #f57c00;
+}
+
+.severity.moderate {
+  background: #fbc02d;
+  color: black;
+}
+
+/* Time & Status */
+.alert-time {
+  margin: 10px 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.alert-status {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.alert-status.active {
+  color: #d32f2f;
+}
+
+.alert-status.acknowledged {
+  color: #f57c00;
+}
+
+/* Action Buttons */
+.alert-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+}
+
+.alert-actions button {
+  flex: 1;
+  margin: 0 4px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.alert-actions .view {
+  background: #4caf50;
+  color: white;
+}
+
+.alert-actions .ack {
+  background: #2196f3;
+  color: white;
+}
+
+.alert-actions .resolve {
+  background: #e53935;
+  color: white;
+}
+
+.alert-actions button:hover {
+  opacity: 0.85;
+}

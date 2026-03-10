@@ -1,0 +1,68 @@
+.ambulance-center .cc-sidebar {
+  background: linear-gradient(180deg, #0c3556, #14527a);
+}
+
+.ambulance-center .nav-btn.active {
+  background: #1d628f;
+}
+
+.ambulance-topbar {
+  gap: 16px;
+}
+
+.ambulance-setup {
+  max-width: 920px;
+}
+
+.ambulance-profile-grid {
+  margin-bottom: 16px;
+}
+
+.ambulance-profile-grid p {
+  margin: 6px 0 0;
+}
+
+.row-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-actions {
+  min-width: 170px;
+}
+
+@media (max-width: 980px) {
+  .ambulance-center .cc-sidebar nav {
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .ambulance-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ambulance-center .cc-main {
+    padding: 16px;
+  }
+
+  .ambulance-center .cc-card {
+    padding: 12px;
+  }
+
+  .compact-actions {
+    min-width: 0;
+  }
+
+  .compact-actions button,
+  .compact-actions span {
+    width: 100%;
+  }
+
+  .row-actions button {
+    width: 100%;
+  }
+}

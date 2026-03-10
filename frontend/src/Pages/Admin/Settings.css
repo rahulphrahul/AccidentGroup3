@@ -1,0 +1,47 @@
+.settings-page {
+  min-height: 100vh;
+  padding: 24px;
+  background: #f1f5f9;
+}
+
+.settings-page header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.settings-page header button,
+.settings-card button {
+  margin-left: 8px;
+  border: none;
+  border-radius: 8px;
+  background: #1d4ed8;
+  color: #fff;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.settings-card {
+  max-width: 480px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  display: grid;
+  gap: 10px;
+}
+
+.settings-card input {
+  padding: 10px;
+  border: 1px solid #d6deea;
+  border-radius: 8px;
+}
+
+.success {
+  color: #166534;
+}
+
+.error {
+  color: #b00020;
+}

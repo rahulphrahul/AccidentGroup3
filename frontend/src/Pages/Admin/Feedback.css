@@ -1,0 +1,103 @@
+.feedback-container {
+  padding: 25px;
+}
+
+/* Header */
+.feedback-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.subtitle {
+  color: rgb(90, 88, 88);
+  font-size: 14px;
+}
+
+/* Filters */
+.feedback-filters {
+  display: flex;
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  outline: none;
+}
+
+.filter-select {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+/* Grid */
+.feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+/* Card */
+.feedback-card {
+  background: rgb(155, 152, 152);
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.18);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.feedback-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+}
+
+/* Top */
+.feedback-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Status Badges */
+.status {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: white;
+}
+
+.status.new {
+  background: #d32f2f;
+}
+
+.status.reviewed {
+  background: #f9a825;
+}
+
+.status.resolved {
+  background: #388e3c;
+}
+
+/* Message */
+.feedback-msg {
+  margin: 15px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Bottom */
+.feedback-bottom {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.rating {
+  font-weight: bold;
+}

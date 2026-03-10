@@ -1,0 +1,174 @@
+/* ================= RESET ================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* ================= CONTAINER ================= */
+.profile-container {
+  max-width: 420px;
+  margin: auto;
+  min-height: 100vh;
+  background: #eef1f7;
+}
+
+/* ================= HEADER ================= */
+.profile-header {
+  background: linear-gradient(130deg, #6a7cff, #7f53ff);
+  color: white;
+  padding: 60px;
+  border-bottom-left-radius: 90px;
+  border-bottom-right-radius: 90px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.back-btn {
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.profile-header h2 {
+  font-size: 22px;
+}
+
+/* ================= PROFILE CARD ================= */
+.profile-card {
+  background: white;
+  margin: -15px 10px 0;
+  padding: 20px;
+  border-radius: 26px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* ================= PROFILE IMAGE ================= */
+.profile-image {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: -70px;
+  margin-bottom: 22px;
+  cursor: pointer; /* 👉 tap opens gallery */
+  position: relative;
+}
+
+.avatar,
+.avatar-img {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 5px solid white;
+  background: #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Placeholder avatar (+) */
+.avatar {
+  font-size: 36px;
+  color: #777;
+}
+
+/* Uploaded image */
+.avatar-img {
+  object-fit: cover;
+}
+
+/* Camera / edit hint overlay */
+.profile-image::after {
+  content: "Tap to change";
+  position: absolute;
+  bottom: -18px;
+  font-size: 12px;
+  color: #777;
+}
+
+/* ================= PROFILE DETAILS ================= */
+.profile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail span {
+  font-size: 13px;
+  color: #888;
+}
+
+.detail p {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+
+/* ================= INPUT FIELDS (EDIT MODE) ================= */
+.detail input {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  margin-top: 4px;
+  outline: none;
+}
+
+.detail input:focus {
+  border-color: #7f53ff;
+}
+
+/* ================= BUTTONS ================= */
+.edit-btn,
+.save-btn,
+.cancel-btn {
+  width: 100%;
+  margin-top: 22px;
+  padding: 14px;
+  border: none;
+  border-radius: 16px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* Edit button */
+.edit-btn {
+  background: linear-gradient(135deg, #6a7cff, #7f53ff);
+  color: white;
+}
+
+/* Save button */
+.save-btn {
+  background: linear-gradient(135deg, #28a745, #2ecc71);
+  color: white;
+}
+
+/* Cancel button */
+.cancel-btn {
+  background: #e0e0e0;
+  color: #333;
+  margin-top: 10px;
+}
+
+/* Button container */
+.btn-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 480px) {
+  .profile-card {
+    margin-top: -30px;
+  }
+
+  .avatar,
+  .avatar-img {
+    width: 105px;
+    height: 105px;
+  }
+}
