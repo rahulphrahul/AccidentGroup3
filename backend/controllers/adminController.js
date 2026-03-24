@@ -5,6 +5,8 @@ const DispatchLog = require("../models/DispatchLog");
 const Ambulance = require("../models/Ambulance");
 const ChatLog = require("../models/ChatLog");
 const AccidentEmulation = require("../models/AccidentEmulation");
+const SOSAlert = require("../models/SOSAlert");
+const { createAccidentAndTriggerWorkflow } = require("../services/accidentWorkflowService");
 const { dispatchForAccident } = require("../services/dispatchService");
 const { emitToRole } = require("../services/socketManager");
 
@@ -20,6 +22,7 @@ exports.getOverview = async (req, res, next) => {
       unresolvedResponses,
       pendingEmulations,
       approvedEmulations,
+      sosAlerts,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ role: "citizen" }),
@@ -30,6 +33,7 @@ exports.getOverview = async (req, res, next) => {
       Response.countDocuments({ responseType: "No Response" }),
       AccidentEmulation.countDocuments({ status: "PendingApproval" }),
       AccidentEmulation.countDocuments({ status: "Approved" }),
+      SOSAlert.countDocuments({ status: { $in: ["New", "ChatStarted"] } }),
     ]);
 
     res.json({
@@ -44,8 +48,61 @@ exports.getOverview = async (req, res, next) => {
         unresolvedResponses,
         pendingEmulations,
         approvedEmulations,
+        sosAlerts,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getSOSAlerts = async (req, res, next) => {
+  try {
+    const alerts = await SOSAlert.find()
+      .populate("userId", "name email phone role")
+      .populate("accidentId", "severity status createdAt location")
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    res.json({ success: true, alerts });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.startSOSChat = async (req, res, next) => {
+  try {
+    const alert = await SOSAlert.findById(req.params.alertId).populate("userId", "name email role");
+    if (!alert) {
+      return res.status(404).json({ success: false, message: "SOS alert not found" });
+    }
+
+    let populatedLog = null;
+
+    if (alert.status === "New") {
+      alert.status = "ChatStarted";
+      await alert.save();
+      const introLog = await ChatLog.create({
+        accidentId: alert.accidentId,
+        userId: alert.userId._id,
+        senderType: "system",
+        message: "Admin joined the SOS support chat. Please describe your situation.",
+        responseType: "Chat",
+      });
+
+      populatedLog = await ChatLog.findById(introLog._id)
+        .populate("userId", "name email role")
+        .populate("accidentId", "severity status createdAt location");
+
+      emitToUser(alert.userId._id, "chat:message", { message: populatedLog });
+      emitToRole("admin", "chat:message", { message: populatedLog });
+      emitToRole("super_admin", "chat:message", { message: populatedLog });
+    }
+
+    emitToRole("admin", "sos:updated", { alertId: alert._id, status: alert.status });
+    emitToRole("super_admin", "sos:updated", { alertId: alert._id, status: alert.status });
+
+    res.json({ success: true, alert, messageLog: populatedLog });
   } catch (error) {
     next(error);
   }
@@ -275,7 +332,7 @@ exports.analyzeEmulationImage = async (req, res, next) => {
 
 exports.getEmulations = async (req, res, next) => {
   try {
-    const query = req.user.role === "admin" ? { createdBy: req.user._id } : {};
+    const query = {};
 
     const emulations = await AccidentEmulation.find(query)
       .populate("createdBy", "name email role")
@@ -284,6 +341,56 @@ exports.getEmulations = async (req, res, next) => {
       .limit(200);
 
     res.json({ success: true, emulations });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.reviewEmulation = async (req, res, next) => {
+  try {
+    const { action, rejectionReason } = req.body;
+
+    const emulation = await AccidentEmulation.findById(req.params.emulationId);
+    if (!emulation) {
+      return res.status(404).json({ success: false, message: "Emulation not found" });
+    }
+
+    if (emulation.status !== "PendingApproval") {
+      return res.status(409).json({ success: false, message: "Emulation already reviewed" });
+    }
+
+    if (action === "approve") {
+      const accident = await createAccidentAndTriggerWorkflow({
+        payload: emulation.payload,
+        source: "manual",
+      });
+
+      emulation.status = "Approved";
+      emulation.generatedAccidentId = accident._id;
+      emulation.reviewedBy = req.user._id;
+      emulation.reviewedAt = new Date();
+      await emulation.save();
+
+      emitToRole("admin", "emulation:reviewed", { emulationId: emulation._id, status: emulation.status });
+      emitToRole("super_admin", "emulation:reviewed", { emulationId: emulation._id, status: emulation.status });
+
+      return res.json({ success: true, emulation, accident });
+    }
+
+    if (action === "reject") {
+      emulation.status = "Rejected";
+      emulation.rejectionReason = rejectionReason || "Rejected by admin";
+      emulation.reviewedBy = req.user._id;
+      emulation.reviewedAt = new Date();
+      await emulation.save();
+
+      emitToRole("admin", "emulation:reviewed", { emulationId: emulation._id, status: emulation.status });
+      emitToRole("super_admin", "emulation:reviewed", { emulationId: emulation._id, status: emulation.status });
+
+      return res.json({ success: true, emulation });
+    }
+
+    return res.status(400).json({ success: false, message: "Invalid action" });
   } catch (error) {
     next(error);
   }

@@ -204,6 +204,10 @@ td {
   background: linear-gradient(180deg, #f8fbff, #eef5ff);
 }
 
+.analysis-card.compact {
+  margin-top: 10px;
+}
+
 .analysis-card h4,
 .analysis-card p {
   margin: 0;
@@ -211,6 +215,88 @@ td {
 
 .analysis-card p + p {
   margin-top: 8px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.section-head h3,
+.section-head p {
+  margin: 0;
+}
+
+.emulation-review-list {
+  display: grid;
+  gap: 14px;
+}
+
+.emulation-review-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 16px;
+  border: 1px solid #dfe7f2;
+  border-radius: 18px;
+  padding: 16px;
+  background: linear-gradient(180deg, #ffffff, #f9fbfe);
+}
+
+.emulation-review-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.emulation-review-copy h4,
+.emulation-review-copy p {
+  margin: 0;
+}
+
+.emulation-review-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.soft-tag {
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #e8eef8;
+  color: #31537c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emulation-review-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.emulation-review-media {
+  min-height: 240px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #edf3fb;
+  border: 1px solid #dbe4f1;
+  display: grid;
+  place-items: center;
+}
+
+.emulation-review-media img,
+.emulation-review-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-placeholder {
+  color: var(--cc-muted);
+  font-weight: 600;
 }
 
 .ambulance-status-block,
@@ -496,6 +582,10 @@ td {
     border-bottom: 1px solid #e1e8f3;
     padding-right: 0;
     padding-bottom: 8px;
+  }
+
+  .emulation-review-card {
+    grid-template-columns: 1fr;
   }
 }
 

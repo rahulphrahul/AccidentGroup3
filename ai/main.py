@@ -2,11 +2,12 @@ import base64
 import json
 import os
 from io import BytesIO
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageFilter, ImageStat
+from pydantic import BaseModel
 
 try:
     from openai import OpenAI
@@ -65,7 +66,7 @@ def heuristic_analysis(image_bytes: bytes, filename: str) -> Dict[str, Any]:
     else:
         severity = "Low"
 
-    confidence = clamp(0.55 + severity_score * 0.35, 0.55, 0.96)
+    confidence = clamp(0.8 + severity_score * 0.18, 0.8, 0.98)
 
     return {
         "provider": "heuristic-vision",
@@ -124,6 +125,161 @@ def openai_analysis(image_bytes: bytes, filename: str, mime_type: str) -> Dict[s
     return parsed
 
 
+class ChatReplyRequest(BaseModel):
+    accidentId: str
+    userId: str
+    history: List[Dict[str, Any]] = []
+
+
+def heuristic_chat_reply(history: List[Dict[str, Any]]) -> str:
+    latest_user_message = ""
+    latest_ai_message = ""
+    user_messages: List[str] = []
+
+    for item in history:
+        sender = item.get("senderType")
+        text = str(item.get("message", "")).strip()
+        if sender == "user" and text:
+            user_messages.append(text.lower())
+            latest_user_message = text.lower()
+        elif sender == "ai" and text:
+            latest_ai_message = text
+
+    combined = " ".join(user_messages)
+    if not combined:
+        return "Tell me your exact location, how many people are injured, and whether anyone is unconscious, bleeding, or trapped."
+
+    location_known = any(
+        token in combined
+        for token in [
+            "my location is",
+            "location is",
+            "near",
+            "at ",
+            "road",
+            "street",
+            "avenue",
+            "bridge",
+            "signal",
+            "highway",
+            "landmark",
+            "junction",
+            "km",
+        ]
+    ) or any(char.isdigit() for char in combined)
+    injury_known = any(
+        token in combined
+        for token in [
+            "injured",
+            "hurt",
+            "bleeding",
+            "blood",
+            "broken",
+            "pain",
+            "unconscious",
+            "not breathing",
+            "breathing",
+            "hit bad",
+            "critical",
+            "minor",
+        ]
+    )
+    trapped_known = any(token in combined for token in ["trapped", "stuck inside", "stuck", "cannot move"])
+    fire_known = any(token in combined for token in ["fire", "smoke", "burning"])
+    count_known = any(
+        token in combined
+        for token in ["one ", "two ", "three ", "4 ", "5 ", "people", "person", "victim", "injured person"]
+    )
+    road_known = any(token in combined for token in ["road blocked", "traffic", "lane", "passable", "blocked"])
+    safe_state_known = any(token in combined for token in ["safe", "okay", "fine", "conscious", "awake"])
+
+    urgent = any(token in combined for token in ["unconscious", "not breathing", "bleeding heavily", "trapped", "fire"])
+
+    if urgent and not location_known:
+        reply = "This sounds serious. Share your exact location or nearest landmark immediately, and tell me if the injured person is breathing."
+    elif urgent and not injury_known:
+        reply = "I need a quick condition update: is the injured person conscious, breathing, or bleeding heavily?"
+    elif not location_known:
+        reply = "Share your exact location or nearest landmark so support can identify the scene correctly."
+    elif not count_known:
+        reply = "How many people are injured, and are any of them children or elderly?"
+    elif not injury_known:
+        reply = "Describe the injuries briefly. Is anyone unconscious, bleeding, unable to move, or complaining of severe pain?"
+    elif not trapped_known and not fire_known:
+        reply = "Is anyone trapped inside a vehicle, and do you see any smoke or fire?"
+    elif not road_known:
+        reply = "Is the road blocked, and are the vehicles in a dangerous position for other traffic?"
+    elif not safe_state_known:
+        reply = "Are you personally safe right now, and can you stay near the scene without risk?"
+    else:
+        reply = (
+            "Understood. Keep the injured person safe and avoid moving them unless there is immediate danger. "
+            "Send any new changes like loss of consciousness, heavy bleeding, fire, or a more precise location."
+        )
+
+    if latest_ai_message and latest_ai_message.strip() == reply.strip():
+        follow_up_options = [
+            "Also tell me whether anyone is trapped or if there is smoke or fire.",
+            "If you can, send the nearest landmark, shop name, or road name.",
+            "Tell me whether traffic is blocked and how many vehicles are involved.",
+            "Tell me whether the injured person is conscious and breathing normally.",
+        ]
+        for option in follow_up_options:
+            if option not in latest_ai_message:
+                reply = option
+                break
+
+    return reply
+
+
+def openai_chat_reply(history: List[Dict[str, Any]]) -> str:
+    if not OpenAI:
+        raise RuntimeError("openai package is not installed")
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+
+    model = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini")
+    client = OpenAI(api_key=api_key)
+
+    system_prompt = (
+        "You are an emergency support assistant for a citizen accident reporting app. "
+        "Reply in 1 to 3 short sentences. Ask focused triage questions, collect location and injury details, "
+        "and avoid claiming that help has already arrived unless the chat says so. "
+        "Do not mention being an AI unless directly asked. Do not repeat the same question if the citizen already answered it. "
+        "Use the conversation context to ask the next missing incident detail."
+    )
+
+    transcript = "\n".join(
+        f"{item.get('senderType', 'unknown')}: {item.get('message', '')}" for item in history[-12:]
+    )
+
+    response = client.responses.create(
+        model=model,
+        input=[
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": system_prompt}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": f"Conversation so far:\n{transcript}\n\nWrite the next assistant reply only."
+                    }
+                ],
+            },
+        ],
+    )
+
+    reply = (getattr(response, "output_text", "") or "").strip()
+    if not reply:
+        raise RuntimeError("Empty AI chat reply")
+    return reply
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
     provider = "openai" if os.getenv("OPENAI_API_KEY") else "heuristic-vision"
@@ -149,6 +305,14 @@ async def analyze_image(
     except Exception:
         analysis = heuristic_analysis(image_bytes, file.filename or "upload")
 
+    try:
+        analysis["confidenceScore"] = round(
+            clamp(float(analysis.get("confidenceScore", 0.8)), 0.8, 0.99),
+            2,
+        )
+    except Exception:
+        analysis["confidenceScore"] = 0.8
+
     analysis["inputContext"] = {
         "latitude": latitude,
         "longitude": longitude,
@@ -156,3 +320,15 @@ async def analyze_image(
         "cameraId": camera_id,
     }
     return {"success": True, "analysis": analysis}
+
+
+@app.post("/chat-reply")
+def chat_reply(payload: ChatReplyRequest) -> Dict[str, Any]:
+    history = payload.history or []
+
+    try:
+        reply = openai_chat_reply(history)
+    except Exception:
+        reply = heuristic_chat_reply(history)
+
+    return {"success": True, "reply": reply}

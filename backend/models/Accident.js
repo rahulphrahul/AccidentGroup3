@@ -33,7 +33,7 @@ const accidentSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ["external_engine", "manual"],
+      enum: ["external_engine", "manual", "citizen_sos"],
       default: "external_engine",
     },
     metadata: { type: mongoose.Schema.Types.Mixed },

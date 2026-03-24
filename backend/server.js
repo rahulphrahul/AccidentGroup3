@@ -52,6 +52,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "1mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use(
   "/api",
@@ -99,6 +100,8 @@ app.get("/api/routes", (req, res) => {
       "GET /api/auth/me",
       "POST /api/accidents/events",
       "GET /api/accidents/my-history",
+      "GET /api/accidents/my-reports",
+      "POST /api/accidents/report",
       "POST /api/accidents/manual",
       "GET /api/notifications/me",
       "PATCH /api/notifications/:notificationId/read",
@@ -124,6 +127,7 @@ app.get("/api/routes", (req, res) => {
       "POST /api/admin/emulations",
       "POST /api/admin/emulations/analyze-image",
       "GET /api/admin/emulations",
+      "POST /api/admin/emulations/:emulationId/review",
       "GET /api/admin/chat-logs",
       "GET /api/chat/conversations",
       "GET /api/chat/messages",

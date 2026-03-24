@@ -7,6 +7,7 @@ import {
   getAdminAccidents,
   getAdminDispatchLogs,
   getAdminOverview,
+  getAdminSOSAlerts,
   getAllUsers,
   getChatConversations,
   getChatMessages,
@@ -14,12 +15,14 @@ import {
   getPendingEmulations,
   getSuperConfig,
   manualDispatch,
-  reviewEmulation,
+  reviewAdminEmulation,
   sendChatMessage,
+  startAdminSOSChat,
   updateSuperConfig,
   updateUser,
   verifyAmbulance,
   verifyAmbulanceByUser,
+  resolveAssetUrl,
 } from "../../service/apiservice";
 import { connectSocket, disconnectSocket } from "../../service/socketService";
 import { clearAuth, getStoredUser } from "../../utils/auth";
@@ -27,6 +30,7 @@ import "./AdminDashboard.css";
 
 const ADMIN_SECTIONS = [
   { id: "overview", label: "Overview" },
+  { id: "sos", label: "SOS Alerts" },
   { id: "emulations", label: "Emulations" },
   { id: "accidents", label: "Accident History" },
   { id: "dispatches", label: "Dispatch Logs" },
@@ -66,6 +70,7 @@ const AdminDashboard = () => {
 
   const [overview, setOverview] = useState(null);
   const [accidents, setAccidents] = useState([]);
+  const [sosAlerts, setSOSAlerts] = useState([]);
   const [dispatches, setDispatches] = useState([]);
   const [users, setUsers] = useState([]);
   const [chatConversations, setChatConversations] = useState([]);
@@ -89,6 +94,7 @@ const AdminDashboard = () => {
       setError("");
       const requests = [
         getAdminOverview(),
+        getAdminSOSAlerts(),
         getAdminAccidents(),
         getAdminDispatchLogs(),
         getAllUsers(),
@@ -100,9 +106,10 @@ const AdminDashboard = () => {
         requests.push(getPendingEmulations(), getSuperConfig());
       }
 
-      const [ov, ac, ds, us, chat, em, pen, cfg] = await Promise.all(requests);
+      const [ov, sos, ac, ds, us, chat, em, pen, cfg] = await Promise.all(requests);
 
       setOverview(ov.overview || null);
+      setSOSAlerts(sos.alerts || []);
       setAccidents(ac.accidents || []);
       setDispatches(ds.logs || []);
       setUsers(us.users || []);
@@ -132,6 +139,8 @@ const AdminDashboard = () => {
     socket.on("dispatch:updated", reload);
     socket.on("dispatch:pending", reload);
     socket.on("response:received", reload);
+    socket.on("sos:new", reload);
+    socket.on("sos:updated", reload);
     socket.on("emulation:new", reload);
     socket.on("emulation:reviewed", reload);
     socket.on("chat:message", ({ message: nextMessage }) => {
@@ -181,6 +190,8 @@ const AdminDashboard = () => {
       socket.off("dispatch:updated", reload);
       socket.off("dispatch:pending", reload);
       socket.off("response:received", reload);
+      socket.off("sos:new", reload);
+      socket.off("sos:updated", reload);
       socket.off("emulation:new", reload);
       socket.off("emulation:reviewed", reload);
       socket.off("chat:message");
@@ -220,7 +231,7 @@ const AdminDashboard = () => {
   const onApproveReject = async (emulationId, action) => {
     try {
       const reason = action === "reject" ? prompt("Reason for rejection", "Insufficient confidence") || "Rejected" : "";
-      await reviewEmulation(emulationId, action, reason);
+      await reviewAdminEmulation(emulationId, action, reason);
       setMessage(`Emulation ${action}d successfully.`);
       loadAll();
     } catch (err) {
@@ -255,7 +266,7 @@ const AdminDashboard = () => {
         }));
       }
 
-      setMessage(`Image analyzed using ${data.analysis?.provider || "AI service"}.`);
+      setMessage("Image analysis completed.");
     } catch (err) {
       setError(err.message || "Failed to analyze image");
     } finally {
@@ -412,6 +423,11 @@ const AdminDashboard = () => {
     return dispatchMap;
   }, [dispatches]);
 
+  const pendingReviewItems = useMemo(
+    () => emulations.filter((row) => row.status === "PendingApproval"),
+    [emulations]
+  );
+
   const renderOverview = () => (
     <div className="cc-grid">
       <article className="cc-card metric"><h3>Total Users</h3><p>{overview?.users ?? 0}</p><small>All registered roles</small></article>
@@ -421,8 +437,71 @@ const AdminDashboard = () => {
       <article className="cc-card metric"><h3>Pending Accidents</h3><p>{overview?.pendingAccidents ?? 0}</p><small>Unresolved incidents</small></article>
       <article className="cc-card metric"><h3>Active Dispatches</h3><p>{overview?.activeDispatches ?? 0}</p><small>Assigned/Accepted</small></article>
       <article className="cc-card metric"><h3>No Responses</h3><p>{overview?.unresolvedResponses ?? 0}</p><small>Auto escalation candidates</small></article>
+      <article className="cc-card metric"><h3>SOS Alerts</h3><p>{overview?.sosAlerts ?? 0}</p><small>Citizen direct help requests</small></article>
       <article className="cc-card metric"><h3>Pending Emulations</h3><p>{overview?.pendingEmulations ?? 0}</p><small>Awaiting verification</small></article>
     </div>
+  );
+
+  const onOpenSOSChat = async (alertItem) => {
+    try {
+      setError("");
+      setMessage("");
+      await startAdminSOSChat(alertItem._id);
+      await loadAll();
+      setActiveSection("chat");
+      setActiveConversation({
+        userId: alertItem.userId?._id || alertItem.userId,
+        accidentId: alertItem.accidentId?._id || alertItem.accidentId,
+        user: alertItem.userId,
+        accident: alertItem.accidentId,
+      });
+      setMessage("SOS chat opened.");
+    } catch (err) {
+      setError(err.message || "Could not open SOS chat");
+    }
+  };
+
+  const renderSOSAlerts = () => (
+    <article className="cc-card">
+      <h3>SOS Alerts</h3>
+      <p className="muted">Direct emergency alerts sent by citizens. Start chat to assist them immediately.</p>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Citizen</th><th>Status</th><th>Location</th><th>Message</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            {sosAlerts.map((alertItem) => (
+              <tr key={alertItem._id}>
+                <td>{new Date(alertItem.createdAt).toLocaleString()}</td>
+                <td>
+                  {alertItem.userId?.name || "Citizen"}
+                  <br />
+                  <span className="muted">{alertItem.userId?.email || "-"}</span>
+                </td>
+                <td><span className={`badge ${alertItem.status === "Resolved" ? "Approved" : "PendingApproval"}`}>{alertItem.status}</span></td>
+                <td>
+                  {alertItem.location?.latitude}, {alertItem.location?.longitude}
+                  <br />
+                  <span className="muted">{alertItem.location?.address || "Coordinates captured"}</span>
+                </td>
+                <td>{alertItem.message}</td>
+                <td>
+                  <button onClick={() => onOpenSOSChat(alertItem)}>
+                    {alertItem.status === "ChatStarted" ? "Open Chat" : "Start Chat"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!sosAlerts.length && (
+              <tr>
+                <td colSpan="6" className="muted">No SOS alerts yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
   );
 
   const renderEmulations = () => (
@@ -451,7 +530,6 @@ const AdminDashboard = () => {
         {analysisResult && (
           <div className="analysis-card">
             <h4>AI Suggestion</h4>
-            <p><strong>Provider:</strong> {analysisResult.provider}</p>
             <p><strong>Severity:</strong> {analysisResult.severity}</p>
             <p><strong>Confidence:</strong> {Math.round((analysisResult.confidenceScore || 0) * 100)}%</p>
             <p><strong>Summary:</strong> {analysisResult.summary}</p>
@@ -460,18 +538,82 @@ const AdminDashboard = () => {
       </article>
 
       <article className="cc-card">
+        <div className="section-head">
+          <div>
+            <h3>Citizen Incident Queue</h3>
+            <p className="muted">
+              Citizen uploads reuse the same emulation database. Review the evidence and AI analysis here.
+            </p>
+          </div>
+          <span className="badge PendingApproval">{pendingReviewItems.length} Pending</span>
+        </div>
+        <div className="emulation-review-list">
+          {pendingReviewItems.map((row) => {
+            const media = row.payload?.metadata?.media;
+            const analysis = row.payload?.metadata?.aiImageAnalysis;
+            const isCitizenUpload = row.payload?.metadata?.source === "citizen_upload";
+
+            return (
+              <article key={row._id} className="emulation-review-card">
+                <div className="emulation-review-copy">
+                  <div className="emulation-review-meta">
+                    <span className={`badge ${row.status}`}>{row.status}</span>
+                    <span className="soft-tag">{isCitizenUpload ? "Citizen Upload" : "Admin Emulation"}</span>
+                    <span className="soft-tag">
+                      {row.createdBy?.name || "Unknown"} ({row.createdBy?.role || "-"})
+                    </span>
+                  </div>
+                  <h4>{row.payload?.severity} incident near {row.payload?.address || "captured coordinates"}</h4>
+                  <p className="muted">
+                    Submitted {new Date(row.createdAt).toLocaleString()} | {row.payload?.latitude},{" "}
+                    {row.payload?.longitude}
+                  </p>
+                  <p>{row.payload?.metadata?.citizenDescription || "No witness description provided."}</p>
+                  {analysis && (
+                    <div className="analysis-card compact">
+                      <h4>AI Analysis</h4>
+                      <p><strong>Severity:</strong> {analysis.severity}</p>
+                      <p><strong>Confidence:</strong> {Math.round((analysis.confidenceScore || 0) * 100)}%</p>
+                      <p><strong>Summary:</strong> {analysis.summary}</p>
+                    </div>
+                  )}
+                  <div className="emulation-review-actions">
+                    <button onClick={() => onApproveReject(row._id, "approve")}>Approve Incident</button>
+                    <button className="secondary" onClick={() => onApproveReject(row._id, "reject")}>
+                      Reject
+                    </button>
+                  </div>
+                </div>
+                <div className="emulation-review-media">
+                  {media?.url && media.kind === "image" && (
+                    <img src={resolveAssetUrl(media.url)} alt="Incident evidence" />
+                  )}
+                  {media?.url && media.kind === "video" && (
+                    <video src={resolveAssetUrl(media.url)} controls />
+                  )}
+                  {!media?.url && <div className="media-placeholder">No evidence file attached</div>}
+                </div>
+              </article>
+            );
+          })}
+          {!pendingReviewItems.length && <p className="muted">No pending citizen incident submissions.</p>}
+        </div>
+      </article>
+
+      <article className="cc-card">
         <h3>Emulation History</h3>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Created</th><th>Severity</th><th>Status</th><th>Confidence</th><th>Reviewer</th><th>Reason</th>
+                <th>Created</th><th>Type</th><th>Severity</th><th>Status</th><th>Confidence</th><th>Reviewer</th><th>Reason</th>
               </tr>
             </thead>
             <tbody>
               {emulations.map((row) => (
                 <tr key={row._id}>
                   <td>{new Date(row.createdAt).toLocaleString()}</td>
+                  <td>{row.payload?.metadata?.source === "citizen_upload" ? "Citizen Upload" : "Admin Emulation"}</td>
                   <td>{row.payload?.severity}</td>
                   <td><span className={`badge ${row.status}`}>{row.status}</span></td>
                   <td>{Math.round((row.payload?.confidenceScore || 0) * 100)}%</td>
@@ -497,7 +639,7 @@ const AdminDashboard = () => {
             </tr>
           </thead>
           <tbody>
-            {pendingEmulations.map((row) => (
+            {(pendingEmulations.length ? pendingEmulations : pendingReviewItems).map((row) => (
               <tr key={row._id}>
                 <td>{new Date(row.createdAt).toLocaleString()}</td>
                 <td>{row.createdBy?.name} ({row.createdBy?.email})</td>
@@ -691,7 +833,15 @@ const AdminDashboard = () => {
                 <span className={`chat-severity ${String(conversation.accident?.severity || "unknown").toLowerCase()}`}>
                   {conversation.accident?.severity || "Unknown"}
                 </span>
-                <span className="chat-sender-tag">{conversation.latestSenderType}</span>
+                <span className="chat-sender-tag">
+                  {conversation.latestSenderType === "ai"
+                    ? "AI"
+                    : conversation.latestSenderType === "admin"
+                      ? "Admin"
+                      : conversation.latestSenderType === "system"
+                        ? "System"
+                        : "Citizen"}
+                </span>
               </div>
               <p>{conversation.latestMessage}</p>
             </button>
@@ -720,6 +870,8 @@ const AdminDashboard = () => {
                     <strong>
                       {chat.senderType === "admin"
                         ? "Admin"
+                        : chat.senderType === "ai"
+                          ? "AI"
                         : chat.senderType === "system"
                           ? "System"
                           : chat.userId?.name || "Citizen"}
@@ -792,6 +944,7 @@ const AdminDashboard = () => {
         {error && <p className="error-text">{error}</p>}
 
         {activeSection === "overview" && renderOverview()}
+        {activeSection === "sos" && renderSOSAlerts()}
         {activeSection === "emulations" && renderEmulations()}
         {activeSection === "approvals" && isSuper && renderApprovals()}
         {activeSection === "accidents" && renderAccidents()}

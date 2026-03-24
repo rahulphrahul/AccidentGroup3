@@ -16,7 +16,7 @@ const chatLogSchema = new mongoose.Schema(
     },
     senderType: {
       type: String,
-      enum: ["system", "user", "admin"],
+      enum: ["system", "user", "admin", "ai"],
       required: true,
     },
     message: { type: String, required: true },

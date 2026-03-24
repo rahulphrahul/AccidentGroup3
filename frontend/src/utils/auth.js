@@ -15,6 +15,10 @@ export const saveAuth = ({ token, user }) => {
   localStorage.setItem("user", JSON.stringify(user));
 };
 
+export const saveUser = (user) => {
+  localStorage.setItem("user", JSON.stringify(user));
+};
+
 export const clearAuth = () => {
   localStorage.removeItem("token");
   localStorage.removeItem("user");

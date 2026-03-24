@@ -3,6 +3,7 @@ const Accident = require("../models/Accident");
 const ChatLog = require("../models/ChatLog");
 const User = require("../models/User");
 const { emitToRole, emitToUser } = require("../services/socketManager");
+const { generateAIReply } = require("../services/aiChatService");
 
 const populateLog = (query) =>
   query.populate("userId", "name email role").populate("accidentId", "severity status createdAt location");
@@ -114,6 +115,31 @@ exports.sendMessage = async (req, res, next) => {
     emitToUser(userId, "chat:message", { message: populatedLog });
     emitToRole("admin", "chat:message", { message: populatedLog });
     emitToRole("super_admin", "chat:message", { message: populatedLog });
+
+    if (req.user.role === "citizen") {
+      Promise.resolve()
+        .then(async () => {
+          const aiReply = await generateAIReply({ accidentId, userId });
+          if (!aiReply) return;
+
+          const aiLog = await ChatLog.create({
+            accidentId,
+            userId,
+            senderType: "ai",
+            message: aiReply,
+            responseType: "Chat",
+          });
+
+          const populatedAiLog = await populateLog(ChatLog.findById(aiLog._id));
+
+          emitToUser(userId, "chat:message", { message: populatedAiLog });
+          emitToRole("admin", "chat:message", { message: populatedAiLog });
+          emitToRole("super_admin", "chat:message", { message: populatedAiLog });
+        })
+        .catch((error) => {
+          console.error("AI chat reply failed", error.message);
+        });
+    }
 
     res.status(201).json({ success: true, message: populatedLog });
   } catch (error) {

@@ -1,7 +1,14 @@
+const fs = require("fs");
+const path = require("path");
 const { validationResult } = require("express-validator");
 const Response = require("../models/Response");
+const AccidentEmulation = require("../models/AccidentEmulation");
 const { dispatchForAccident } = require("../services/dispatchService");
 const { createAccidentAndTriggerWorkflow } = require("../services/accidentWorkflowService");
+const { emitToRole } = require("../services/socketManager");
+
+const uploadsRoot = path.join(__dirname, "..", "uploads", "incident-media");
+fs.mkdirSync(uploadsRoot, { recursive: true });
 
 exports.createFromDetectionEngine = async (req, res, next) => {
   try {
@@ -61,6 +68,115 @@ exports.manualCreateAccident = async (req, res, next) => {
     });
 
     res.status(201).json({ success: true, accident });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.submitCitizenIncident = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Image or video file is required" });
+    }
+
+    const latitude = Number(req.body.latitude);
+    const longitude = Number(req.body.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return res.status(400).json({ success: false, message: "Valid latitude and longitude are required" });
+    }
+
+    const isImage = String(req.file.mimetype || "").startsWith("image/");
+    let analysis = null;
+
+    if (isImage) {
+      try {
+        const aiServiceUrl = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
+        const formData = new FormData();
+        formData.append(
+          "file",
+          new Blob([fs.readFileSync(req.file.path)], { type: req.file.mimetype || "image/jpeg" }),
+          req.file.originalname || path.basename(req.file.path)
+        );
+        formData.append("latitude", String(latitude));
+        formData.append("longitude", String(longitude));
+        formData.append("address", req.body.address || "");
+        formData.append("camera_id", "");
+
+        const response = await fetch(`${aiServiceUrl.replace(/\/+$/, "")}/analyze-image`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok) {
+          analysis = payload.analysis || null;
+        }
+      } catch {}
+    }
+
+    const mediaUrl = `/uploads/incident-media/${path.basename(req.file.path)}`;
+    const severity = analysis?.severity || req.body.severity || "Medium";
+    const confidenceScore = Number(analysis?.confidenceScore ?? req.body.confidenceScore ?? 0.6);
+
+    const emulation = await AccidentEmulation.create({
+      createdBy: req.user._id,
+      payload: {
+        latitude,
+        longitude,
+        severity,
+        confidenceScore: Math.max(0, Math.min(1, confidenceScore)),
+        cameraId: "",
+        address: req.body.address || "",
+        metadata: {
+          source: "citizen_upload",
+          citizenDescription: req.body.description || "",
+          media: {
+            kind: isImage ? "image" : "video",
+            mimeType: req.file.mimetype,
+            originalName: req.file.originalname,
+            fileName: path.basename(req.file.path),
+            url: mediaUrl,
+          },
+          aiImageAnalysis: analysis,
+        },
+      },
+      status: "PendingApproval",
+    });
+
+    emitToRole("admin", "emulation:new", {
+      emulationId: emulation._id,
+      status: emulation.status,
+      source: "citizen_upload",
+    });
+    emitToRole("super_admin", "emulation:new", {
+      emulationId: emulation._id,
+      status: emulation.status,
+      source: "citizen_upload",
+    });
+
+    res.status(201).json({
+      success: true,
+      emulation,
+      analysis,
+      message: "Incident report submitted for admin approval",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getMyIncidentReports = async (req, res, next) => {
+  try {
+    const reports = await AccidentEmulation.find({
+      createdBy: req.user._id,
+      "payload.metadata.source": "citizen_upload",
+    })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    res.json({ success: true, reports });
   } catch (error) {
     next(error);
   }

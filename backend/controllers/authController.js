@@ -21,7 +21,7 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { name, email, phone, password, role = "citizen", location } = req.body;
+    const { name, email, phone, password, role = "citizen", location, bloodGroup, emergencyContact } = req.body;
     const normalizedEmail = normalizeEmail(email);
 
     const existing = await User.findOne({ email: normalizedEmail });
@@ -35,6 +35,11 @@ exports.register = async (req, res, next) => {
       name,
       email: normalizedEmail,
       phone,
+      bloodGroup: bloodGroup || "",
+      emergencyContact: {
+        name: emergencyContact?.name || "",
+        phone: emergencyContact?.phone || "",
+      },
       password: hashedPassword,
       role,
       location,
@@ -50,6 +55,8 @@ exports.register = async (req, res, next) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        bloodGroup: user.bloodGroup || "",
+        emergencyContact: user.emergencyContact || { name: "", phone: "" },
         role: user.role,
       },
     });
@@ -87,6 +94,8 @@ exports.login = async (req, res, next) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        bloodGroup: user.bloodGroup || "",
+        emergencyContact: user.emergencyContact || { name: "", phone: "" },
         role: user.role,
       },
     });
@@ -123,4 +132,43 @@ exports.forgotPassword = async (req, res, next) => {
 
 exports.me = async (req, res) => {
   res.json({ success: true, user: req.user });
+};
+
+exports.updateMe = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const updates = {
+      name: req.body.name,
+      phone: req.body.phone,
+      bloodGroup: req.body.bloodGroup || "",
+      emergencyContact: {
+        name: req.body.emergencyContact?.name || "",
+        phone: req.body.emergencyContact?.phone || "",
+      },
+    };
+
+    if (req.body.email) {
+      const normalizedEmail = normalizeEmail(req.body.email);
+      const existing = await User.findOne({
+        email: normalizedEmail,
+        _id: { $ne: req.user._id },
+      }).select("_id");
+
+      if (existing) {
+        return res.status(409).json({ success: false, message: "Email already registered" });
+      }
+
+      updates.email = normalizedEmail;
+    }
+
+    const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true }).select("-password");
+
+    res.json({ success: true, user });
+  } catch (error) {
+    next(error);
+  }
 };

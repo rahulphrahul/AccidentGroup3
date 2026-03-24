@@ -1,9 +1,10 @@
 import axios from "axios";
-import { clearAuth, getToken, saveAuth } from "../utils/auth";
+import { clearAuth, getToken, saveAuth, saveUser } from "../utils/auth";
 
 const RAW_BASE_URL = process.env.REACT_APP_API_BASE || "http://localhost:3001/api";
 const trimmedBase = RAW_BASE_URL.replace(/\/+$/, "");
 const BASE_URL = trimmedBase.includes("/api") ? trimmedBase : `${trimmedBase}/api`;
+const ASSET_BASE_URL = BASE_URL.replace(/\/api$/, "");
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -48,6 +49,12 @@ export const registerUser = async (payload) => {
 
 export const fetchMe = async () => (await api.get("/auth/me")).data;
 
+export const updateMyProfile = async (payload) => {
+  const { data } = await api.patch("/auth/me", payload);
+  if (data.user) saveUser(data.user);
+  return data;
+};
+
 export const getMyNotifications = async (unreadOnly = false) =>
   (await api.get(`/notifications/me?unreadOnly=${unreadOnly}`)).data;
 
@@ -57,9 +64,26 @@ export const markNotificationRead = async (notificationId) =>
 export const submitSafetyResponse = async (payload) =>
   (await api.post("/responses", payload)).data;
 
+export const triggerSOSAlert = async (payload) => (await api.post("/responses/sos", payload)).data;
+
 export const getMyResponses = async () => (await api.get("/responses/me")).data;
 
 export const getMyAccidentHistory = async () => (await api.get("/accidents/my-history")).data;
+
+export const getMyIncidentReports = async () => (await api.get("/accidents/my-reports")).data;
+
+export const submitCitizenIncident = async (file, payload = {}) => {
+  const formData = new FormData();
+  formData.append("media", file);
+  Object.entries(payload).forEach(([key, value]) => {
+    formData.append(key, value ?? "");
+  });
+
+  const { data } = await api.post("/accidents/report", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
 
 export const registerAmbulance = async (payload) =>
   (await api.post("/ambulances/register", payload)).data;
@@ -84,6 +108,11 @@ export const completeDispatch = async (dispatchId) =>
   (await api.post(`/ambulances/dispatches/${dispatchId}/complete`)).data;
 
 export const getAdminOverview = async () => (await api.get("/admin/overview")).data;
+
+export const getAdminSOSAlerts = async () => (await api.get("/admin/sos-alerts")).data;
+
+export const startAdminSOSChat = async (alertId) =>
+  (await api.post(`/admin/sos-alerts/${alertId}/start-chat`)).data;
 
 export const getAdminAccidents = async () => (await api.get("/admin/accidents")).data;
 
@@ -131,6 +160,9 @@ export const analyzeEmulationImage = async (file, payload = {}) => {
 
 export const getEmulations = async () => (await api.get("/admin/emulations")).data;
 
+export const reviewAdminEmulation = async (emulationId, action, rejectionReason = "") =>
+  (await api.post(`/admin/emulations/${emulationId}/review`, { action, rejectionReason })).data;
+
 export const getChatLogs = async () => (await api.get("/admin/chat-logs")).data;
 
 export const getChatConversations = async () => (await api.get("/chat/conversations")).data;
@@ -158,5 +190,11 @@ export const sendDetectionEvent = async (payload, detectionKey) =>
       headers: detectionKey ? { "x-detection-key": detectionKey } : {},
     })
   ).data;
+
+export const resolveAssetUrl = (assetPath = "") => {
+  if (!assetPath) return "";
+  if (/^https?:\/\//i.test(assetPath)) return assetPath;
+  return `${ASSET_BASE_URL}${assetPath.startsWith("/") ? assetPath : `/${assetPath}`}`;
+};
 
 export default api;

@@ -3,6 +3,8 @@ const Response = require("../models/Response");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 const ChatLog = require("../models/ChatLog");
+const Accident = require("../models/Accident");
+const SOSAlert = require("../models/SOSAlert");
 const { stopSafetyTimer } = require("../services/timerService");
 const { dispatchForAccident } = require("../services/dispatchService");
 const { emitToRole, emitToUser } = require("../services/socketManager");
@@ -87,6 +89,76 @@ exports.getMyResponses = async (req, res, next) => {
       .sort({ createdAt: -1 });
 
     res.json({ success: true, responses });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.triggerSOSAlert = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const latitude = Number(req.body.latitude);
+    const longitude = Number(req.body.longitude);
+    const address = req.body.address || "";
+
+    const accident = await Accident.create({
+      location: {
+        type: "Point",
+        coordinates: [longitude, latitude],
+        address,
+      },
+      severity: "High",
+      confidenceScore: 1,
+      source: "citizen_sos",
+      metadata: {
+        citizenSos: true,
+        citizenUserId: req.user._id,
+        source: "citizen_sos",
+      },
+    });
+
+    const sosAlert = await SOSAlert.create({
+      userId: req.user._id,
+      accidentId: accident._id,
+      location: { latitude, longitude, address },
+      message: req.body.message || "Citizen requested urgent help through SOS.",
+    });
+
+    const introLog = await ChatLog.create({
+      accidentId: accident._id,
+      userId: req.user._id,
+      senderType: "system",
+      message: "SOS alert sent to admin. Support chat is ready.",
+      responseType: "Chat",
+    });
+
+    const admins = await User.find({ role: { $in: ["admin", "super_admin"] } }).select("_id");
+    if (admins.length) {
+      await Notification.insertMany(
+        admins.map((u) => ({
+          userId: u._id,
+          accidentId: accident._id,
+          type: "SYSTEM",
+          message: `SOS alert from ${req.user.name || req.user.email}`,
+        }))
+      );
+    }
+
+    emitToUser(req.user._id, "chat:message", { message: introLog });
+    emitToRole("admin", "chat:message", { message: introLog });
+    emitToRole("super_admin", "chat:message", { message: introLog });
+    emitToRole("admin", "sos:new", { sosAlertId: sosAlert._id, accidentId: accident._id, userId: req.user._id });
+    emitToRole("super_admin", "sos:new", {
+      sosAlertId: sosAlert._id,
+      accidentId: accident._id,
+      userId: req.user._id,
+    });
+
+    res.status(201).json({ success: true, sosAlert, accident, chatAccidentId: accident._id });
   } catch (error) {
     next(error);
   }
